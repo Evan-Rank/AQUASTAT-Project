@@ -1,28 +1,64 @@
-#Practice data manipulation on aquastat
+---
+title: "AQUASTAT World Water Stress"
+subtitle: ""
+author: "Evan Rank"
+institute: ""
+date: "2021/05/09 (updated: `r Sys.Date()`)"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      highlightSpans: true
+      countIncrementalSlides: false
+---
 
-#libraries
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+```
+# Dataset
+
+AQUASTAT is a publicly available, free information system on water resources and agriculture management.
+
+It is maintained by the Food and Agriculture Organization of the United Nations.
+
+It can be accessed at http://www.fao.org/aquastat/en/. Click on "Databases" to access the system (a short survey may be prompted).
+
+I will provide the CSV of my own query, but you can make your own to access different data.
+---
+
+# Libraries and Data
+
+```{r}
 library(here)
 library(tidyverse)
 library(maps)
 library(mapdata)
 library(mapproj)
 library(ggrepel)
-library(ghibli)
-
-#Story - 1. Current water stress worldwide 2. How did we get here?  3. Is it associated with economic success?
-
-#Water stress occurs when the demand for water exceeds the available 
-#amount during a certain period or when poor quality restricts its use. 
-#Water stress causes deterioration of fresh water resources in terms of quantity 
-#(aquifer over-exploitation, dry rivers, etc.) and quality (eutrophication, organic 
-#matter pollution, saline intrusion, etc.) -EEA of the EU
-#https://www.eea.europa.eu/archived/archived-content-water-topic/wise-help-centre/glossary-definitions/water-stress
-
-#Read in data
 
 aquastat <- read_csv(here("Data", "aquastat_flat.csv"))
+```
 
-#cleaning
+---
+
+# Goal of Inquiry
+
+* What countries are experiencing high water stress conditions today?
+  + Water stress occurs when the demand for water exceeds available water, whether the restriction is by amount or quality.
+  
+* What is the recent history of water stress? Any trends?
+
+* Hypothesis: Economic inequality makes it difficult to correct water availability issues.
+
+---
+# Cleaning Data
+
+```{r}
 aquastat_wide <- aquastat %>% 
   select(Area, Variable_Name, Year, Value) %>% 
   filter(complete.cases(.)) %>% 
@@ -31,27 +67,30 @@ aquastat_wide <- aquastat %>%
 colClean <- function(x){ colnames(x) <- gsub(" ", "_", colnames(x)); x }
 
 aquastat_clean <- colClean(aquastat_wide)
+```
 
-
-#1. Mapping
-library(maps)
-library(mapdata)
-library(mapproj)
-world <- map_data("world") #map_data gets base layer
-
-head(world)
-
-#prep to join
+---
+# Recent Water Stress Data - Mapping
+* Prep to Join with "world"
+```{r}
+world <- map_data("world")
 
 aquastat_stress <- aquastat_clean %>% 
   select(Area, SDG_6.4.2._Water_Stress, Year) %>% 
   filter(complete.cases(.)) %>% 
   rename(region = Area)
 
+#Check for unjoined regions
 anti_2017 <- aquastat_stress %>% 
   filter(Year==2017) %>% 
   anti_join(world)
 
+head(anti_2017)
+```
+---
+# Rename to Join
+
+```{r}
 aquastat_stress1 <- aquastat_clean %>% 
   select(Area, SDG_6.4.2._Water_Stress, Year) %>% 
   filter(complete.cases(.)) %>% 
@@ -73,26 +112,20 @@ aquastat_stress1 <- aquastat_clean %>%
   mutate(region = str_replace(region, "Syrian Arab Republic", "Syria")) %>% 
   mutate(region = str_replace(region, "Congo", "Republic of Congo")) %>% 
   mutate(region = str_replace(region, "Democratic Republic of the Republic of Congo", "Democratic Republic of the Congo"))
-
-#Double check
-
-anti_20171 <- aquastat_stress1 %>% 
-  filter(Year==2017) %>% 
-  anti_join(world)
-
-view(anti_20171)
-
-#Join
-
+```
+---
+# Join with "world"
+```{r}
 stress_2017 <- aquastat_stress1 %>% 
   filter(Year==2017) %>% 
   left_join(world)
+```
+---
 
-view(stress_2017)
- #Map
+# Map Data
 
-ghibli_palettes$KikiMedium
-
+.pull-left[
+```{r, stress_2017, eval=FALSE, warning=FALSE, message=FALSE}
 ggplot()+
   geom_polygon(data=stress_2017, aes(x=long, y=lat, group=group, fill=SDG_6.4.2._Water_Stress), color="black")+
   theme_minimal()+
@@ -103,29 +136,49 @@ ggplot()+
        y="",
        fill="Water Stress (log10)")+
   theme(plot.title = element_text(hjust = 0.5, color = "#333544FF"),
-        legend.title = element_text(color = "#333544FF"))
+        legend.title = element_text(color = "#333544FF"),
+        panel.background= element_rect(color="grey12"))
 
-#2. Time Series
 
-library(ggrepel)
-#Data wrangling <-
+```
+]
+.pull-right[
+```{r stress_2017-out, ref.label="stress_2017", echo=FALSE}
+
+```
+]
+
+---
+```{r stress_2017-out-1, ref.label="stress_2017", echo=FALSE}
+
+```
+
+---
+# Deciding what to fit in a time-series
+
+```{r}
 aquastat_stress2 <- aquastat_clean %>% 
   select(Area, SDG_6.4.2._Water_Stress, Year, Total_population) %>% 
   filter(complete.cases(.)) %>% 
   filter(Year==1992)
 
-view(aquastat_stress2)
-
+```
+---
+# Subset selected areas
+```{r}
 aquastat_high_pop <- aquastat_clean %>% 
   select(Area, SDG_6.4.2._Water_Stress, Year, Total_population) %>% 
   filter(complete.cases(.)) %>% 
   filter(str_detect(Area, "China|India|United States of America|Indonesia|Brazil|Russian Federation|Japan|Pakistan|Nigeria|Mexico|Germany|Viet Nam|Iran \\(Islamic Republic of\\)|Egypt|United Kingdom"))
+```
+---
+# Line chart in time series
 
-view(aquastat_high_pop)
-
+.pull-left[
+```{r, stress_by_year, eval=FALSE, warning=FALSE, message=FALSE}
 ggplot(aquastat_high_pop, aes(x=Year, y= SDG_6.4.2._Water_Stress, color=Area, label=Area))+
   geom_line(size=1.5)+
-  geom_text_repel(data = aquastat_high_pop %>% filter(Year == 2017), nudge_x = 2, size=3, show.legend = FALSE)+
+  geom_text_repel(data = aquastat_high_pop %>% filter(Year == 2017), nudge_x = 2, size=4, show.legend = FALSE)+
   labs(x= "Year",
        y= "Water Stress",
        title= "Water Stress by Year",
@@ -134,21 +187,30 @@ ggplot(aquastat_high_pop, aes(x=Year, y= SDG_6.4.2._Water_Stress, color=Area, la
   scale_color_viridis_d()+
   theme(plot.title=element_text(hjust=0.5),
         plot.subtitle=element_text(hjust=0.5))
- 
+```
+]
 
-# geom_label(aes(label = Area),
-           # data = aquastat_high_pop %>% filter(Year == 2017), size = 3, position=position_dodge(.7))
+.pull-right[
+```{r stress_by_year-out, ref.label="stress_by_year", echo=FALSE}
 
-  
-  # geom_text(aes(label=Area), position=position_dodge(.9))
-  
-#3. Related to economic success? (GDP)
+```
+]
+---
+# Is this related to economic success?
 
+* As before but selecting with GDP
+```{r}
 aquastat_WS_GDP <- aquastat_clean %>% 
   select(Area, SDG_6.4.2._Water_Stress, Year, Total_population, `Gross_Domestic_Product_(GDP)`) %>% 
   filter(complete.cases(.)) %>% 
   filter(str_detect(Area, "China|India|United States of America|Indonesia|Brazil|Russian Federation|Japan|Pakistan|Nigeria|Mexico|Germany|Viet Nam|Iran \\(Islamic Republic of\\)|Egypt|United Kingdom"))
+```
 
+---
+
+# Relationship between GDP and changes in water stress
+.pull-left[
+```{r, stress_gdp_year, eval=FALSE, warning=FALSE, message=FALSE}
   ggplot(aquastat_WS_GDP, aes(x=SDG_6.4.2._Water_Stress, y=`Gross_Domestic_Product_(GDP)`, color=Area))+ 
     geom_point(size=4)+
     facet_wrap(~Year)+
@@ -158,3 +220,32 @@ aquastat_WS_GDP <- aquastat_clean %>%
          subtitle="In Worldwide High-Population Nations")+
     scale_color_viridis_d()
   
+```
+]
+.pull-right[
+```{r stress_gdp_year-out, ref.label="stress_gdp_year", echo=FALSE}
+
+```
+]
+---
+
+```{r stress_gdp_year-out-1, ref.label="stress_gdp_year", echo=FALSE}
+
+```
+---
+
+# Thanks for a great semester, BIOL 551!
+
+* Slides made with Xaringan package
+* Data from http://www.fao.org/aquastat/en/
+
+---
+
+
+
+
+
+
+
+
+

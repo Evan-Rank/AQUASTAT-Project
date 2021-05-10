@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>AQUASTAT World Water Stress</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Evan Rank" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <link href="libs/remark-css/default.css" rel="stylesheet" />
+    <link href="libs/remark-css/default-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# AQUASTAT World Water Stress
+### Evan Rank
+### 2021/05/09 (updated: 2021-05-10)
+
+---
+
+
+
+# Dataset
+
+AQUASTAT is a publicly available, free information system on water resources and agriculture management.
+
+It is maintained by the Food and Agriculture Organization of the United Nations.
+
+It can be accessed at http://www.fao.org/aquastat/en/. Click on "Databases" to access the system (a short survey may be prompted).
+
+I will provide the CSV of my own query, but you can make your own to access different data.
+---
+
+# Libraries and Data
+
+
+```r
+library(here)
+library(tidyverse)
+library(maps)
+library(mapdata)
+library(mapproj)
+library(ggrepel)
+
+aquastat &lt;- read_csv(here("Data", "aquastat_flat.csv"))
+```
+
+---
+
+# Goal of Inquiry
+
+* What countries are experiencing high water stress conditions today?
+  + Water stress occurs when the demand for water exceeds available water, whether the restriction is by amount or quality.
+  
+* What is the recent history of water stress? Any trends?
+
+* Hypothesis: Economic inequality makes it difficult to correct water availability issues.
+
+---
+# Cleaning Data
+
+
+```r
+aquastat_wide &lt;- aquastat %&gt;% 
+  select(Area, Variable_Name, Year, Value) %&gt;% 
+  filter(complete.cases(.)) %&gt;% 
+  pivot_wider(names_from = Variable_Name, values_from = Value)
+
+colClean &lt;- function(x){ colnames(x) &lt;- gsub(" ", "_", colnames(x)); x }
+
+aquastat_clean &lt;- colClean(aquastat_wide)
+```
+
+---
+# Recent Water Stress Data - Mapping
+* Prep to Join with "world"
+
+```r
+world &lt;- map_data("world")
+
+aquastat_stress &lt;- aquastat_clean %&gt;% 
+  select(Area, SDG_6.4.2._Water_Stress, Year) %&gt;% 
+  filter(complete.cases(.)) %&gt;% 
+  rename(region = Area)
+
+#Check for unjoined regions
+anti_2017 &lt;- aquastat_stress %&gt;% 
+  filter(Year==2017) %&gt;% 
+  anti_join(world)
+
+head(anti_2017)
+```
+
+```
+## # A tibble: 6 x 3
+##   region                           SDG_6.4.2._Water_Stress  Year
+##   &lt;chr&gt;                                              &lt;dbl&gt; &lt;dbl&gt;
+## 1 Antigua and Barbuda                               8.46    2017
+## 2 Bolivia (Plurinational State of)                  1.18    2017
+## 3 Brunei Darussalam                                 3.47    2017
+## 4 Cabo Verde                                        8.43    2017
+## 5 Congo                                             0.0274  2017
+## 6 Côte d'Ivoire                                     5.09    2017
+```
+---
+# Rename to Join
+
+
+```r
+aquastat_stress1 &lt;- aquastat_clean %&gt;% 
+  select(Area, SDG_6.4.2._Water_Stress, Year) %&gt;% 
+  filter(complete.cases(.)) %&gt;% 
+  rename(region = Area) %&gt;% 
+  mutate(region = str_replace(region, "United States of America", "USA")) %&gt;% 
+  mutate(region = str_replace(region, "Russian Federation", "Russia")) %&gt;% 
+  mutate(region = str_replace(region, "Democratic People's Republic of Korea", "North Korea")) %&gt;% 
+  mutate(region = str_replace(region, "Venezuela \\(Bolivarian Republic of\\)", "Venezuela")) %&gt;% 
+  mutate(region = str_replace(region, "Viet Nam", "Vietnam")) %&gt;%
+  mutate(region = str_replace(region, "Bolivia \\(Plurinational State of\\)", "Bolivia")) %&gt;%
+  mutate(region = str_replace(region, "Brunei Darussalam", "Brunei")) %&gt;%
+  mutate(region = str_replace(region, "Cabo Verde", "Cape Verde")) %&gt;%
+  mutate(region = str_replace(region, "Côte d'Ivoire", "Ivory Coast")) %&gt;%
+  mutate(region = str_replace(region, "Iran \\(Islamic Republic of\\)", "Iran")) %&gt;%
+  mutate(region = str_replace(region, "Republic of Korea", "South Korea")) %&gt;%
+  mutate(region = str_replace(region, "Republic of Moldova", "Moldova")) %&gt;%
+  mutate(region = str_replace(region, "United Kingdom", "UK")) %&gt;%
+  mutate(region = str_replace(region, "United Republic of Tanzania", "Tanzania")) %&gt;%
+  mutate(region = str_replace(region, "Syrian Arab Republic", "Syria")) %&gt;% 
+  mutate(region = str_replace(region, "Congo", "Republic of Congo")) %&gt;% 
+  mutate(region = str_replace(region, "Democratic Republic of the Republic of Congo", "Democratic Republic of the Congo"))
+```
+---
+# Join with "world"
+
+```r
+stress_2017 &lt;- aquastat_stress1 %&gt;% 
+  filter(Year==2017) %&gt;% 
+  left_join(world)
+```
+---
+
+# Map Data
+
+.pull-left[
+
+```r
+ggplot()+
+  geom_polygon(data=stress_2017, aes(x=long, y=lat, group=group, fill=SDG_6.4.2._Water_Stress), color="black")+
+  theme_minimal()+
+  coord_map("mercator", xlim=c(-180, 180))+
+  scale_fill_gradient(trans="log10", low="#B50A2AFF", high="#0E84B4FF")+
+  labs(title="World Water Stress, ~2017",
+       x="",
+       y="",
+       fill="Water Stress (log10)")+
+  theme(plot.title = element_text(hjust = 0.5, color = "#333544FF"),
+        legend.title = element_text(color = "#333544FF"),
+        panel.background= element_rect(color="grey12"))
+```
+]
+.pull-right[
+![](aquastat_slides_files/figure-html/stress_2017-out-1.png)&lt;!-- --&gt;
+]
+
+---
+![](aquastat_slides_files/figure-html/stress_2017-out-1-1.png)&lt;!-- --&gt;
+
+---
+# Deciding what to fit in a time-series
+
+
+```r
+aquastat_stress2 &lt;- aquastat_clean %&gt;% 
+  select(Area, SDG_6.4.2._Water_Stress, Year, Total_population) %&gt;% 
+  filter(complete.cases(.)) %&gt;% 
+  filter(Year==1992)
+```
+---
+# Subset selected areas
+
+```r
+aquastat_high_pop &lt;- aquastat_clean %&gt;% 
+  select(Area, SDG_6.4.2._Water_Stress, Year, Total_population) %&gt;% 
+  filter(complete.cases(.)) %&gt;% 
+  filter(str_detect(Area, "China|India|United States of America|Indonesia|Brazil|Russian Federation|Japan|Pakistan|Nigeria|Mexico|Germany|Viet Nam|Iran \\(Islamic Republic of\\)|Egypt|United Kingdom"))
+```
+---
+# Line chart in time series
+
+.pull-left[
+
+```r
+ggplot(aquastat_high_pop, aes(x=Year, y= SDG_6.4.2._Water_Stress, color=Area, label=Area))+
+  geom_line(size=1.5)+
+  geom_text_repel(data = aquastat_high_pop %&gt;% filter(Year == 2017), nudge_x = 2, size=4, show.legend = FALSE)+
+  labs(x= "Year",
+       y= "Water Stress",
+       title= "Water Stress by Year",
+       subtitle="In Worldwide High-Population Nations",
+       color= "Country")+
+  scale_color_viridis_d()+
+  theme(plot.title=element_text(hjust=0.5),
+        plot.subtitle=element_text(hjust=0.5))
+```
+]
+
+.pull-right[
+![](aquastat_slides_files/figure-html/stress_by_year-out-1.png)&lt;!-- --&gt;
+]
+---
+# Is this related to economic success?
+
+* As before but selecting with GDP
+
+```r
+aquastat_WS_GDP &lt;- aquastat_clean %&gt;% 
+  select(Area, SDG_6.4.2._Water_Stress, Year, Total_population, `Gross_Domestic_Product_(GDP)`) %&gt;% 
+  filter(complete.cases(.)) %&gt;% 
+  filter(str_detect(Area, "China|India|United States of America|Indonesia|Brazil|Russian Federation|Japan|Pakistan|Nigeria|Mexico|Germany|Viet Nam|Iran \\(Islamic Republic of\\)|Egypt|United Kingdom"))
+```
+
+---
+
+# Relationship between GDP and changes in water stress
+.pull-left[
+
+```r
+  ggplot(aquastat_WS_GDP, aes(x=SDG_6.4.2._Water_Stress, y=`Gross_Domestic_Product_(GDP)`, color=Area))+ 
+    geom_point(size=4)+
+    facet_wrap(~Year)+
+    labs(x="Water Stress",
+         y= "Gross Domestic Product",
+         title="Water stress vs GDP Over Time",
+         subtitle="In Worldwide High-Population Nations")+
+    scale_color_viridis_d()
+```
+]
+.pull-right[
+![](aquastat_slides_files/figure-html/stress_gdp_year-out-1.png)&lt;!-- --&gt;
+]
+---
+
+![](aquastat_slides_files/figure-html/stress_gdp_year-out-1-1.png)&lt;!-- --&gt;
+---
+
+# Thanks for a great semester, BIOL 551!
+
+* Slides made with Xaringan package
+* Data from http://www.fao.org/aquastat/en/
+
+---
+
+
+
+
+
+
+
+
+
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"highlightSpans": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
